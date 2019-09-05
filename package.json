@@ -1,5 +1,5 @@
 {
-  "name": "json-schema-to-typescript",
+  "name": "@haggholm/json-schema-to-typescript",
   "version": "6.1.3",
   "description": "compile json schema to typescript typings",
   "main": "dist/src/index.js",
@@ -23,9 +23,13 @@
     "watch": "tsc -w",
     "watch:test": "ava -w"
   },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.com",
+    "access": "public"
+  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bcherny/json-schema-to-typescript.git"
+    "url": "git+https://github.com/haggholm/json-schema-to-typescript.git"
   },
   "keywords": [
     "json",

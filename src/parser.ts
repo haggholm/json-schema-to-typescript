@@ -269,6 +269,8 @@ function newInterface(
     params: parseSchema(schema, options, rootSchema, processed, usedNames, name),
     standaloneName: name,
     superTypes: parseSuperTypes(schema, options, processed, usedNames),
+    tsGenericParams: schema.tsGenericParams,
+    tsGenericValues: schema.tsGenericValues,
     type: 'INTERFACE'
   }
 }

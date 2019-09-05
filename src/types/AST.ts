@@ -55,6 +55,8 @@ export interface TInterface extends AbstractAST {
   type: 'INTERFACE'
   params: TInterfaceParam[]
   superTypes: TNamedInterface[]
+  tsGenericParams?: string[]
+  tsGenericValues?: { [name: string]: string[] }
 }
 
 export interface TNamedInterface extends AbstractAST {
@@ -62,6 +64,8 @@ export interface TNamedInterface extends AbstractAST {
   type: 'INTERFACE'
   params: TInterfaceParam[]
   superTypes: TNamedInterface[]
+  tsGenericParams?: string[]
+  tsGenericValues?: { [name: string]: string[] }
 }
 
 export interface TInterfaceParam {

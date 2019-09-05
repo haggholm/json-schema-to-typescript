@@ -262,6 +262,7 @@ function generateInterface(
   ast: TInterface,
   options: Options
 ): string {
+  const genericValues = ast.tsGenericValues || {}
   return `{`
     + '\n'
     + ast.params
@@ -273,6 +274,7 @@ function generateInterface(
         + (isRequired ? '' : '?')
         + ': '
         + (hasStandaloneName(ast) ? toSafeString(type) : type)
+        + (genericValues[keyName] ? `<${genericValues[keyName].join(', ')}>` : '')
       )
       .join('\n')
     + '\n'
@@ -302,6 +304,7 @@ function generateStandaloneEnum(ast: TEnum, options: Options): string {
 function generateStandaloneInterface(ast: TNamedInterface, options: Options): string {
   return (hasComment(ast) ? generateComment(ast.comment) + '\n' : '')
     + `export interface ${toSafeString(ast.standaloneName)} `
+    + (ast.tsGenericParams ? `<${ast.tsGenericParams.join(', ')}>` : '')
     + (ast.superTypes.length > 0 ? `extends ${ast.superTypes.map(superType => toSafeString(superType.standaloneName)).join(', ')} ` : '')
     + generateInterface(ast, options)
 }

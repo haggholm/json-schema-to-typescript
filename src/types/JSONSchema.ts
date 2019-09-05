@@ -16,6 +16,14 @@ export interface JSONSchema extends JSONSchema4 {
    * schema extension to support custom types
    */
   tsType?: string
+  /**
+   * schema extension to support generic parameter names
+   */
+  tsGenericParams?: string[]
+  /**
+   * schema extension to support generic parameter values
+   */
+  tsGenericValues?: { [key: string]: string[] }
 }
 
 // const SCHEMA_PROPERTIES = [
