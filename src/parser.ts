@@ -31,8 +31,13 @@ export function parse(
   usedNames = new Set<string>()
 ): AST {
   // If we've seen this node before, return it.
-  if (processed.has(schema)) {
-    return processed.get(schema)!
+  const existing = processed.get(schema)
+  if (existing) {
+    // But update the keyName if it didn't already have one
+    if (keyName && existing.keyName === undefined) {
+      existing.keyName = keyName
+    }
+    return existing
   }
 
   const definitions = getDefinitions(rootSchema)
@@ -71,6 +76,10 @@ function parseLiteral(
     standaloneName: keyNameFromDefinition,
     type: 'LITERAL'
   })
+}
+
+function raise(err: Error): never {
+  throw err
 }
 
 function parseNonLiteral(
@@ -226,6 +235,27 @@ function parseNonLiteral(
         type: 'UNION'
       })
     case 'UNNAMED_ENUM':
+      if (schema.tsEnumRef) {
+        const enumAst = parse(schema.tsEnumRef, options, rootSchema, undefined, false, processed, usedNames)
+        if (enumAst.type !== 'ENUM') {
+          throw Error(format('tsEnumRef does not resolve to an enum!', schema))
+        }
+        return set({
+          comment: schema.description,
+          keyName,
+          params: schema.enum!.map<AST>(_ => ({
+            params: `${enumAst.standaloneName}.${
+              (
+                enumAst.params.find(_param => _param.ast.type === 'LITERAL' && _param.ast.params === _) ||
+                raise(new Error(format('%j does not exist in referenced enum', _, schema)))
+              ).keyName
+            }`,
+            type: 'CUSTOM_TYPE'
+          })),
+          standaloneName: standaloneName(schema, keyNameFromDefinition, usedNames),
+          type: 'UNION'
+        })
+      }
       return set({
         comment: schema.description,
         keyName,
