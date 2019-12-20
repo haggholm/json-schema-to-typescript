@@ -9,9 +9,13 @@ export type JSONSchemaTypeName = JSONSchema4TypeName
 
 export interface JSONSchema extends JSONSchema4 {
   /**
-   * schema extension to support numeric enums
+   * schema extension to support defined enums
    */
   tsEnumNames?: string[]
+  /**
+   * schema extension to support using an enum
+   */
+  tsEnumRef?: JSONSchema4
   /**
    * schema extension to support custom types
    */
