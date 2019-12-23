@@ -78,10 +78,6 @@ function parseLiteral(
   })
 }
 
-function raise(err: Error): never {
-  throw err
-}
-
 function parseNonLiteral(
   schema: JSONSchema,
   options: Options,
@@ -240,18 +236,20 @@ function parseNonLiteral(
         if (enumAst.type !== 'ENUM') {
           throw Error(format('tsEnumRef does not resolve to an enum!', schema))
         }
+        const params = schema.enum!.map<AST>(_value => {
+          const enumParam = enumAst.params.find(_ => _.ast.type === 'LITERAL' && _.ast.params === _value)
+          if (!enumParam) {
+            throw new Error(format('%j does not exist in referenced enum', _value, schema))
+          }
+          return {
+            params: [enumAst, enumParam],
+            type: 'TYPE_REFERENCE'
+          }
+        })
         return set({
           comment: schema.description,
           keyName,
-          params: schema.enum!.map<AST>(_ => ({
-            params: `${enumAst.standaloneName}.${
-              (
-                enumAst.params.find(_param => _param.ast.type === 'LITERAL' && _param.ast.params === _) ||
-                raise(new Error(format('%j does not exist in referenced enum', _, schema)))
-              ).keyName
-            }`,
-            type: 'CUSTOM_TYPE'
-          })),
+          params,
           standaloneName: standaloneName(schema, keyNameFromDefinition, usedNames),
           type: 'UNION'
         })

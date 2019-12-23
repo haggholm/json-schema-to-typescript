@@ -12,7 +12,8 @@ import {
   TInterface,
   TIntersection,
   TNamedInterface,
-  TUnion
+  TUnion,
+  TTypeReference
 } from './types/AST'
 import {log, toSafeString} from './utils'
 
@@ -282,6 +283,8 @@ function generateRawType(ast: AST, options: Options): string {
       return generateSetOperation(ast, options)
     case 'CUSTOM_TYPE':
       return ast.params
+    case 'TYPE_REFERENCE':
+      return generateEnumReference(ast)
   }
 }
 
@@ -335,6 +338,11 @@ function generateStandaloneEnum(ast: TEnum, options: Options): string {
     '\n' +
     '}'
   )
+}
+
+function generateEnumReference(ast: TTypeReference): string {
+  const [parent, key] = ast.params
+  return `${toSafeString(parent.standaloneName)}.${key.keyName}`
 }
 
 function generateStandaloneInterface(ast: TNamedInterface, options: Options): string {

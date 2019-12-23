@@ -4,7 +4,7 @@ export type AST_TYPE = AST['type']
 
 export type AST = TAny | TArray | TBoolean | TEnum | TInterface | TNamedInterface
   | TIntersection | TLiteral | TNumber | TNull | TObject | TReference
-  | TString | TTuple | TUnion | TCustomType
+  | TString | TTuple | TUnion | TCustomType | TTypeReference
 
 export interface AbstractAST {
   comment?: string
@@ -49,6 +49,12 @@ export interface TEnum extends AbstractAST {
 export interface TEnumParam {
   ast: AST
   keyName: string
+}
+
+export interface TTypeReference extends AbstractAST {
+  type: 'TYPE_REFERENCE'
+  // Note: this can be expanded for other advanced type referencing, to reduce duplication
+  params: [TEnum, TEnumParam]
 }
 
 export interface TInterface extends AbstractAST {
