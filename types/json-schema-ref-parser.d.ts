@@ -4,7 +4,7 @@
 // Definitions: https://github.com/DefinitelyTyped/DefinitelyTyped
 // TypeScript Version: 2.1
 
-declare module 'json-schema-ref-parser' {
+declare module '@apidevtools/json-schema-ref-parser' {
 
   import { JSONSchema4, JSONSchema4Type } from 'json-schema'
 
