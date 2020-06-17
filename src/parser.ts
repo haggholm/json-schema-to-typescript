@@ -427,7 +427,6 @@ via the \`definition\` "${key}".`
 
   // handle additionalProperties
   switch (schema.additionalProperties) {
-    case undefined:
     case true:
       if (singlePatternProperty) {
         return asts
@@ -440,6 +439,7 @@ via the \`definition\` "${key}".`
         keyName: '[k: string]'
       })
 
+    case undefined:
     case false:
       return asts
 
