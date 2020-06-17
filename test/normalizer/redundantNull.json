@@ -20,7 +20,7 @@
     }
   },
   "out": {
-    "additionalProperties": true,
+    "additionalProperties": false,
     "id": "RedundantNull",
     "required": [],
     "type": "object",

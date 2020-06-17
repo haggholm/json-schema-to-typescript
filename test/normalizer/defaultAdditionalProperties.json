@@ -1,5 +1,5 @@
 {
-  "name": "Default additionalProperties to true",
+  "name": "Default additionalProperties to false",
   "in": {
     "id": "foo",
     "type": ["object"],
@@ -21,6 +21,6 @@
       }
     },
     "required": [],
-    "additionalProperties": true
+    "additionalProperties": false
   }
 }
