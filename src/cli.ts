@@ -1,12 +1,19 @@
 #!/usr/bin/env node
 
 import {whiteBright} from 'cli-color'
-import {JSONSchema4} from 'json-schema'
 import minimist = require('minimist')
-import {readFile, writeFile} from 'mz/fs'
-import {resolve} from 'path'
+import {readFile, writeFile, existsSync, lstatSync, readdirSync} from 'mz/fs'
+import * as mkdirp from 'mkdirp'
+import * as _glob from 'glob'
+import isGlob = require('is-glob')
+import {promisify} from 'util'
+import {join, resolve, dirname, basename} from 'path'
 import stdin = require('stdin')
 import {compile, Options} from './index'
+import {pathTransform} from './utils'
+
+// Promisify glob
+const glob = promisify(_glob)
 
 main(
   minimist(process.argv.slice(2), {
@@ -25,16 +32,106 @@ async function main(argv: minimist.ParsedArgs) {
   }
 
   const argIn: string = argv._[0] || argv.input
-  const argOut: string = argv._[1] || argv.output
+  const argOut: string | undefined = argv._[1] || argv.output // the output can be omitted so this can be undefined
+
+  const ISGLOB = isGlob(argIn)
+  const ISDIR = isDir(argIn)
+
+  if ((ISGLOB || ISDIR) && argOut && argOut.includes('.d.ts')) {
+    throw new ReferenceError(
+      `You have specified a single file ${argOut} output for a multi file input ${argIn}. This feature is not yet supported, refer to issue #272 (https://github.com/bcherny/json-schema-to-typescript/issues/272)`
+    )
+  }
 
   try {
-    const schema: JSONSchema4 = JSON.parse(await readInput(argIn))
-    const ts = await compile(schema, argIn, argv as Partial<Options>)
-    await writeOutput(ts, argOut)
+    // Process input as either glob, directory, or single file
+    if (ISGLOB) {
+      await processGlob(argIn, argOut, argv as Partial<Options>)
+    } else if (ISDIR) {
+      await processDir(argIn, argOut, argv as Partial<Options>)
+    } else {
+      const result = await processFile(argIn, argv as Partial<Options>)
+      outputResult(result, argOut)
+    }
   } catch (e) {
     console.error(whiteBright.bgRedBright('error'), e)
     process.exit(1)
   }
+}
+
+// check if path is an existing directory
+function isDir(path: string): boolean {
+  return existsSync(path) && lstatSync(path).isDirectory()
+}
+
+async function processGlob(argIn: string, argOut: string | undefined, argv: Partial<Options>) {
+  const files = await glob(argIn) // execute glob pattern match
+
+  if (files.length === 0) {
+    throw ReferenceError(
+      `You passed a glob pattern "${argIn}", but there are no files that match that pattern in ${process.cwd()}`
+    )
+  }
+
+  // we can do this concurrently for perf
+  const results = await Promise.all(
+    files.map(async file => {
+      return [file, await processFile(file, argv)] as const
+    })
+  )
+
+  // careful to do this serially
+  results.forEach(([file, result]) => {
+    const outputPath = argOut && `${argOut}/${basename(file, '.json')}.d.ts`
+    outputResult(result, outputPath)
+  })
+}
+
+async function processDir(argIn: string, argOut: string | undefined, argv: Partial<Options>) {
+  const files = getPaths(argIn)
+
+  // we can do this concurrently for perf
+  const results = await Promise.all(
+    files.map(async file => {
+      if (!argOut) {
+        return [file, await processFile(file, argv)] as const
+      } else {
+        const outputPath = pathTransform(argOut, argIn, file)
+        return [file, await processFile(file, argv), outputPath] as const
+      }
+    })
+  )
+
+  // careful to do this serially
+  results.forEach(([file, result, outputPath]) =>
+    outputResult(result, outputPath ? `${outputPath}/${basename(file, '.json')}.d.ts` : undefined)
+  )
+}
+
+async function outputResult(result: string, outputPath: string | undefined): Promise<void> {
+  if (!outputPath) {
+    process.stdout.write(result)
+  } else {
+    if (!isDir(dirname(outputPath))) {
+      mkdirp.sync(dirname(outputPath))
+    }
+    return await writeFile(outputPath, result)
+  }
+}
+
+async function processFile(argIn: string, argv: Partial<Options>): Promise<string> {
+  const schema = JSON.parse(await readInput(argIn))
+  return compile(schema, argIn, argv)
+}
+
+function getPaths(path: string, paths: string[] = []) {
+  if (existsSync(path) && lstatSync(path).isDirectory()) {
+    readdirSync(resolve(path)).forEach(item => getPaths(join(path, item), paths))
+  } else {
+    paths.push(path)
+  }
+
+  return paths
 }
 
 function readInput(argIn?: string) {
@@ -42,18 +139,6 @@ function readInput(argIn?: string) {
     return new Promise(stdin)
   }
   return readFile(resolve(process.cwd(), argIn), 'utf-8')
-}
-
-function writeOutput(ts: string, argOut: string): Promise<void> {
-  if (!argOut) {
-    try {
-      process.stdout.write(ts)
-      return Promise.resolve()
-    } catch (err) {
-      return Promise.reject(err)
-    }
-  }
-  return writeFile(argOut, ts)
 }
 
 function printHelp() {
@@ -79,6 +164,8 @@ Boolean values can be set to false using the 'no-' prefix.
       Prepend enums with 'const'?
   --style.XXX=YYY
       Prettier configuration
+  --unknownAny
+      Output unknown type instead of any type
   --unreachableDefinitions
       Generates code for definitions that aren't referenced by the schema
 `

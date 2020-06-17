@@ -1,6 +1,6 @@
 import {whiteBright} from 'cli-color'
 import {deburr, isPlainObject, mapValues, trim, upperFirst} from 'lodash'
-import {basename, extname} from 'path'
+import {basename, dirname, extname, join, normalize, sep} from 'path'
 import {JSONSchema} from './types/JSONSchema'
 
 // TODO: pull out into a separate package
@@ -77,18 +77,22 @@ const BLACKLISTED_KEYS = new Set([
   'oneOf',
   'not'
 ])
-function traverseObjectKeys(obj: Record<string, JSONSchema>, callback: (schema: JSONSchema) => void) {
+function traverseObjectKeys(obj: Record<string, JSONSchema>, callback: (schema: JSONSchema, isRoot: boolean) => void) {
   Object.keys(obj).forEach(k => {
     if (obj[k] && typeof obj[k] === 'object' && !Array.isArray(obj[k])) {
-      traverse(obj[k], callback)
+      traverse(obj[k], callback, false)
     }
   })
 }
-function traverseArray(arr: JSONSchema[], callback: (schema: JSONSchema) => void) {
-  arr.forEach(i => traverse(i, callback))
+function traverseArray(arr: JSONSchema[], callback: (schema: JSONSchema, isRoot: boolean) => void) {
+  arr.forEach(i => traverse(i, callback, false))
 }
-export function traverse(schema: JSONSchema, callback: (schema: JSONSchema) => void): void {
-  callback(schema)
+export function traverse(
+  schema: JSONSchema,
+  callback: (schema: JSONSchema, isRoot: boolean) => void,
+  isRoot: boolean
+): void {
+  callback(schema, isRoot)
 
   if (schema.anyOf) {
     traverseArray(schema.anyOf, callback)
@@ -106,18 +110,18 @@ export function traverse(schema: JSONSchema, callback: (schema: JSONSchema) => v
     traverseObjectKeys(schema.patternProperties, callback)
   }
   if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
-    traverse(schema.additionalProperties, callback)
+    traverse(schema.additionalProperties, callback, false)
   }
   if (schema.items) {
     const {items} = schema
     if (Array.isArray(items)) {
       traverseArray(items, callback)
     } else {
-      traverse(items, callback)
+      traverse(items, callback, false)
     }
   }
   if (schema.additionalItems && typeof schema.additionalItems === 'object') {
-    traverse(schema.additionalItems, callback)
+    traverse(schema.additionalItems, callback, false)
   }
   if (schema.dependencies) {
     traverseObjectKeys(schema.dependencies, callback)
@@ -126,7 +130,7 @@ export function traverse(schema: JSONSchema, callback: (schema: JSONSchema) => v
     traverseObjectKeys(schema.definitions, callback)
   }
   if (schema.not) {
-    traverse(schema.not, callback)
+    traverse(schema.not, callback, false)
   }
 
   // technically you can put definitions on any key
@@ -183,14 +187,19 @@ export function toSafeString(string: string) {
 
 export function generateName(from: string, usedNames: Set<string>) {
   let name = toSafeString(from)
+  if (!name) {
+    name = 'NoName'
+  }
 
   // increment counter until we find a free name
   if (usedNames.has(name)) {
     let counter = 1
-    while (usedNames.has(name)) {
-      name = `${toSafeString(from)}${counter}`
+    let nameWithCounter = `${name}${counter}`
+    while (usedNames.has(nameWithCounter)) {
+      nameWithCounter = `${name}${counter}`
       counter++
     }
+    name = nameWithCounter
   }
 
   usedNames.add(name)
@@ -220,4 +229,23 @@ export function escapeBlockComment(schema: JSONSchema) {
       schema[key] = schema[key]!.replace(/\*\//g, replacer)
     }
   }
+}
+
+/*
+the following logic determines the out path by comparing the in path to the users specified out path.
+For example, if input directory MultiSchema looks like:
+  MultiSchema/foo/a.json
+  MultiSchema/bar/fuzz/c.json
+  MultiSchema/bar/d.json
+And the user wants the outputs to be in MultiSchema/Out, then this code will be able to map the inner directories foo, bar, and fuzz into the intended Out directory like so:
+  MultiSchema/Out/foo/a.json
+  MultiSchema/Out/bar/fuzz/c.json
+  MultiSchema/Out/bar/d.json
+*/
+export function pathTransform(outputPath: string, inputPath: string, filePath: string): string {
+  const inPathList = normalize(inputPath).split(sep)
+  const filePathList = dirname(normalize(filePath)).split(sep)
+  const filePathRel = filePathList.filter((f, i) => f !== inPathList[i])
+
+  return join(normalize(outputPath), ...filePathRel)
 }

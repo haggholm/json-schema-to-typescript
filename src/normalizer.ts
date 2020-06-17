@@ -1,10 +1,10 @@
 import {whiteBright} from 'cli-color'
-import stringify = require('json-stringify-safe')
 import {cloneDeep} from 'lodash'
 import {JSONSchema, JSONSchemaTypeName, NormalizedJSONSchema} from './types/JSONSchema'
 import {escapeBlockComment, justName, log, toSafeString, traverse} from './utils'
+import {Options} from './'
 
-type Rule = (schema: JSONSchema, rootSchema: JSONSchema, fileName?: string) => void
+type Rule = (schema: JSONSchema, rootSchema: JSONSchema, fileName: string, options: Options, isRoot: boolean) => void
 const rules = new Map<string, Rule>()
 
 function hasType(schema: JSONSchema, type: JSONSchemaTypeName) {
@@ -53,8 +53,8 @@ rules.set('Default additionalProperties to true', schema => {
   }
 })
 
-rules.set('Default top level `id`', (schema, rootSchema, fileName) => {
-  if (!schema.id && stringify(schema) === stringify(rootSchema)) {
+rules.set('Default top level `id`', (schema, _rootSchema, fileName, _options, isRoot) => {
+  if (isRoot && !schema.id) {
     schema.id = toSafeString(justName(fileName))
   }
 })
@@ -63,7 +63,21 @@ rules.set('Escape closing JSDoc Comment', schema => {
   escapeBlockComment(schema)
 })
 
-rules.set('Normalise schema.minItems', schema => {
+rules.set('Optionally remove maxItems and minItems', (schema, _rootSchema, _fileName, options) => {
+  if (options.ignoreMinAndMaxItems) {
+    if ('maxItems' in schema) {
+      delete schema.maxItems
+    }
+    if ('minItems' in schema) {
+      delete schema.minItems
+    }
+  }
+})
+
+rules.set('Normalise schema.minItems', (schema, _rootSchema, _fileName, options) => {
+  if (options.ignoreMinAndMaxItems) {
+    return
+  }
   // make sure we only add the props onto array types
   if (isArrayType(schema)) {
     const {minItems} = schema
@@ -72,7 +86,10 @@ rules.set('Normalise schema.minItems', schema => {
   // cannot normalise maxItems because maxItems = 0 has an actual meaning
 })
 
-rules.set('Normalize schema.items', schema => {
+rules.set('Normalize schema.items', (schema, _rootSchema, _fileName, options) => {
+  if (options.ignoreMinAndMaxItems) {
+    return
+  }
   const {maxItems, minItems} = schema
   const hasMaxItems = typeof maxItems === 'number' && maxItems >= 0
   const hasMinItems = typeof minItems === 'number' && minItems > 0
@@ -97,10 +114,10 @@ rules.set('Normalize schema.items', schema => {
   return schema
 })
 
-export function normalize(schema: JSONSchema, filename?: string): NormalizedJSONSchema {
+export function normalize(schema: JSONSchema, filename: string, options: Options): NormalizedJSONSchema {
   const _schema = cloneDeep(schema) as NormalizedJSONSchema
   rules.forEach((rule, key) => {
-    traverse(_schema, schema => rule(schema, _schema, filename))
+    traverse(_schema, (schema, isRoot) => rule(schema, _schema, filename, options, isRoot), true)
     log(whiteBright.bgYellow('normalizer'), `Applied rule: "${key}"`)
   })
   return _schema

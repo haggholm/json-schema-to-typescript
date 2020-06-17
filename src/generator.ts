@@ -44,6 +44,9 @@ function declareEnums(ast: AST, options: Options, processed = new Set<AST>()): s
       break
     case 'ARRAY':
       return declareEnums(ast.params, options, processed)
+    case 'UNION':
+    case 'INTERSECTION':
+      return ast.params.reduce((prev, ast) => prev + declareEnums(ast, options, processed), '')
     case 'TUPLE':
       type = ast.params.reduce((prev, ast) => prev + declareEnums(ast, options, processed), '')
       if (ast.spreadParam) {
@@ -177,7 +180,7 @@ function generateRawType(ast: AST, options: Options): string {
 
   switch (ast.type) {
     case 'ANY':
-      return 'any'
+      return options.unknownAny ? 'unknown' : 'any'
     case 'ARRAY':
       return (() => {
         const type = generateType(ast.params, options)

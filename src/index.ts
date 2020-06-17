@@ -33,6 +33,10 @@ export interface Options {
    */
   enableConstEnums: boolean
   /**
+   * Ignore maxItems and minItems for `array` types, preventing tuples being generated.
+   */
+  ignoreMinAndMaxItems: boolean
+  /**
    * Append all index signatures with `| undefined` so that they are strictly typed.
    *
    * This is required to be compatible with `strictNullChecks`.
@@ -46,6 +50,10 @@ export interface Options {
    * Generate code for `definitions` that aren't referenced by the schema?
    */
   unreachableDefinitions: boolean
+  /**
+   * Generate unknown type instead of any
+   */
+  unknownAny: boolean
   /**
    * [$RefParser](https://github.com/BigstickCarpet/json-schema-ref-parser) Options, used when resolving `$ref`s
    */
@@ -63,6 +71,7 @@ export const DEFAULT_OPTIONS: Options = {
   cwd: process.cwd(),
   declareExternallyReferenced: true,
   enableConstEnums: true, // by default, avoid generating code
+  ignoreMinAndMaxItems: false,
   strictIndexSignatures: false,
   style: {
     bracketSpacing: false,
@@ -73,7 +82,8 @@ export const DEFAULT_OPTIONS: Options = {
     trailingComma: 'none',
     useTabs: false
   },
-  unreachableDefinitions: false
+  unreachableDefinitions: false,
+  unknownAny: true
 }
 
 export function compileFromFile(filename: string, options: Partial<Options> = DEFAULT_OPTIONS): Promise<string> {
@@ -107,7 +117,7 @@ export async function compile(schema: JSONSchema4, name: string, options: Partia
   }
 
   return format(
-    generate(optimize(parse(await dereference(normalize(schema, name), _options), _options)), _options),
+    generate(optimize(parse(await dereference(normalize(schema, name, _options), _options), _options)), _options),
     _options
   )
 }

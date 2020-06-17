@@ -1,6 +1,6 @@
-# json-schema-to-typescript [![Build Status][build]](https://circleci.com/gh/bcherny/json-schema-to-typescript) [![npm]](https://www.npmjs.com/package/json-schema-to-typescript) [![mit]](https://opensource.org/licenses/MIT)
+# json-schema-to-typescript [![Build Status][build]](https://github.com/bcherny/json-schema-to-typescript/actions?query=branch%3Amaster+workflow%3ACI) [![npm]](https://www.npmjs.com/package/json-schema-to-typescript) [![mit]](https://opensource.org/licenses/MIT)
 
-[build]: https://img.shields.io/circleci/project/github/bcherny/json-schema-to-typescript/master.svg?style=flat-square
+[build]: https://img.shields.io/github/workflow/status/bcherny/json-schema-to-typescript/CI/master?style=flat-square
 [npm]: https://img.shields.io/npm/v/json-schema-to-typescript.svg?style=flat-square
 [mit]: https://img.shields.io/npm/l/json-schema-to-typescript.svg?style=flat-square
 
@@ -87,13 +87,15 @@ See [server demo](example) and [browser demo](https://github.com/bcherny/json-sc
 | cwd | string | `process.cwd()` | Root directory for resolving [`$ref`](https://tools.ietf.org/id/draft-pbryan-zyp-json-ref-03.html)s |
 | declareExternallyReferenced | boolean | `true` | Declare external schemas referenced via `$ref`? |
 | enableConstEnums | boolean | `true` | Prepend enums with [`const`](https://www.typescriptlang.org/docs/handbook/enums.html#computed-and-constant-members)? |
+| ignoreMinAndMaxItems | boolean | `false` | Ignore maxItems and minItems for `array` types, preventing tuples being generated. |
 | style | object | `{ bracketSpacing: false,  printWidth: 120,  semi: true,  singleQuote: false,  tabWidth: 2,  trailingComma: 'none',  useTabs: false }` | A [Prettier](https://prettier.io/docs/en/options.html) configuration |
+| unknownAny | boolean | `true` | Use `unknown` instead of `any` where possible |
 | unreachableDefinitions | boolean | `false` | Generates code for `definitions` that aren't referenced by the schema. |
 | strictIndexSignatures | boolean | `false` | Append all index signatures with `| undefined` so that they are strictly typed. |
 | $refOptions | object | `{}` | [$RefParser](https://github.com/BigstickCarpet/json-schema-ref-parser) Options, used when resolving `$ref`s |
 ## CLI
 
-A simple CLI utility is provided with this package.
+A CLI utility is provided with this package.
 
 ```sh
 cat foo.json | json2ts > foo.d.ts
@@ -105,6 +107,10 @@ json2ts foo.json foo.d.ts
 json2ts --input foo.json --output foo.d.ts
 # or
 json2ts -i foo.json -o foo.d.ts
+# or
+json2ts -i schemas/**/*.json
+# or
+json2ts -i schemas/ -o types/
 ```
 
 You can pass any of the options described above (including style options) as CLI flags. Boolean values can be set to false using the `no-` prefix.
@@ -180,7 +186,12 @@ json2ts -i foo.json -o foo.d.ts --style.singleQuote --no-style.semi
 - JSON-schema test suite: https://github.com/json-schema/JSON-Schema-Test-Suite/blob/node
 - TypeScript spec: https://github.com/Microsoft/TypeScript/blob/master/doc/spec.md
 
-## Projects That Use JSON-Schema-to-TypeScript
+## Who uses JSON-Schema-to-TypeScript?
 
-- [RAML-to-TypeScript](https://github.com/ducin/raml-to-typescript)
-- See more: https://www.npmjs.com/browse/depended/json-schema-to-typescript
+- [AWS](https://github.com/aws/aws-toolkit-vscode), [AWSLabs](https://github.com/awslabs/cdk8s)
+- [FormatJS](https://github.com/formatjs/formatjs)
+- [Microsoft](https://github.com/microsoft/mixed-reality-extension-sdk)
+- [Sourcegraph](https://github.com/sourcegraph/sourcegraph)
+- [Stryker](https://github.com/stryker-mutator/stryker)
+- [Webpack](https://github.com/webpack/webpack)
+- [See more](https://github.com/bcherny/json-schema-to-typescript/network/dependents?package_id=UGFja2FnZS0xNjUxOTM5Mg%3D%3D)
