@@ -363,10 +363,9 @@ function generateStandaloneInterface(ast: TNamedInterface, options: Options): st
 function generateStandaloneType(ast: ASTWithStandaloneName, options: Options): string {
   return (
     (hasComment(ast) ? generateComment(ast.comment) + '\n' : '') +
-    `export type ${toSafeString(ast.standaloneName)} = ${generateType(
-      omit<AST>(ast, 'standaloneName') as AST /* TODO */,
-      options
-    )}`
+    `export type ${toSafeString(ast.standaloneName)}` +
+    (ast.tsGenericParams ? `<${ast.tsGenericParams.join(', ')}>` : '') +
+    ` = ${generateType(omit<AST>(ast, 'standaloneName') as AST /* TODO */, options)}`
   )
 }
 

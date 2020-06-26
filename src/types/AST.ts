@@ -15,7 +15,10 @@ export interface AbstractAST {
 
 export type ASTWithComment = AST & { comment: string }
 export type ASTWithName = AST & { keyName: string }
-export type ASTWithStandaloneName = AST & { standaloneName: string }
+export type ASTWithStandaloneName = AST & {
+  standaloneName: string,
+  tsGenericParams?: string[],
+}
 
 export function hasComment(ast: AST): ast is ASTWithComment {
   return 'comment' in ast && ast.comment != null && ast.comment !== ''
