@@ -1,5 +1,5 @@
 import {readFileSync} from 'fs'
-import {JSONSchema4} from 'json-schema'
+import {JSONSchema4, JSONSchema6} from 'json-schema'
 import {Options as $RefOptions} from '@apidevtools/json-schema-ref-parser'
 import {endsWith, merge} from 'lodash'
 import {dirname} from 'path'
@@ -102,7 +102,11 @@ export function compileFromFile(filename: string, options: Partial<Options> = DE
   return compile(schema, stripExtension(filename), {cwd: dirname(filename), ...options})
 }
 
-export async function compile(schema: JSONSchema4, name: string, options: Partial<Options> = {}): Promise<string> {
+export async function compile(
+  schema: JSONSchema4 | JSONSchema6,
+  name: string,
+  options: Partial<Options> = {}
+): Promise<string> {
   const _options = merge({}, DEFAULT_OPTIONS, options)
 
   const errors = validate(schema, name)

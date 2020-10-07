@@ -87,7 +87,7 @@ function parseNonLiteral(
   set: (ast: AST) => AST,
   processed: Processed,
   usedNames: UsedNames
-) {
+): AST {
   log(whiteBright.bgBlue('parser'), schema, '<-' + typeOfSchema(schema), processed.has(schema) ? '(FROM CACHE)' : '')
 
   switch (typeOfSchema(schema)) {
@@ -142,6 +142,13 @@ function parseNonLiteral(
       })
     case 'NAMED_SCHEMA':
       return set(newInterface(schema as SchemaSchema, options, rootSchema, processed, usedNames, keyName))
+    case 'NEVER':
+      return set({
+        comment: schema.description,
+        keyName,
+        standaloneName: standaloneName(schema, keyNameFromDefinition, usedNames),
+        type: 'NEVER'
+      })
     case 'NULL':
       return set({
         comment: schema.description,

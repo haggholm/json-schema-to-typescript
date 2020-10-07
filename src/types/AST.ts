@@ -3,7 +3,7 @@ import { JSONSchema4Type } from 'json-schema'
 export type AST_TYPE = AST['type']
 
 export type AST = TAny | TArray | TBoolean | TEnum | TInterface | TNamedInterface
-  | TIntersection | TLiteral | TNumber | TNull | TObject | TReference
+  | TIntersection | TLiteral | TNever | TNumber | TNull | TObject | TReference
   | TString | TTuple | TUnion | TCustomType | TTypeReference
 
 export interface AbstractAST {
@@ -90,6 +90,10 @@ export interface TIntersection extends AbstractAST {
 export interface TLiteral extends AbstractAST {
   params: JSONSchema4Type
   type: 'LITERAL'
+}
+
+export interface TNever extends AbstractAST {
+  type: 'NEVER'
 }
 
 export interface TNumber extends AbstractAST {

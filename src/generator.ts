@@ -194,6 +194,8 @@ function generateRawType(ast: AST, options: Options): string {
       return generateSetOperation(ast, options)
     case 'LITERAL':
       return JSON.stringify(ast.params)
+    case 'NEVER':
+      return 'never'
     case 'NUMBER':
       return 'number'
     case 'NULL':
