@@ -32,16 +32,10 @@ export function parse(
 ): AST {
   // If we've seen this node before, return it.
   let existing = processed.get(schema)
-  if (!existing && typeof schema === 'object' && schema && (schema as Exclude<typeof schema, any[]>).title) {
-    const title = (schema as Exclude<typeof schema, any[]>).title
+  if (!existing && typeof schema === 'object' && schema) {
     for (let iterKeys = processed.keys(), iter = iterKeys.next(); !iter.done; iter = iterKeys.next()) {
       const candidate = iter.value
-      if (
-        typeof candidate === 'object' &&
-        candidate &&
-        (candidate as Exclude<typeof candidate, any[]>).title === title &&
-        isEqual(schema, candidate)
-      ) {
+      if (typeof candidate === 'object' && candidate && isEqual(schema, candidate)) {
         existing = processed.get(candidate)!
         processed.set(schema, existing)
       }
