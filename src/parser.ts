@@ -1,6 +1,6 @@
 import {whiteBright} from 'cli-color'
 import {JSONSchema4Type, JSONSchema4TypeName} from 'json-schema'
-import {findKey, includes, isPlainObject, map} from 'lodash'
+import {isEqual, findKey, includes, isPlainObject, map} from 'lodash'
 import {format} from 'util'
 import {Options} from './'
 import {typeOfSchema} from './typeOfSchema'
@@ -31,7 +31,22 @@ export function parse(
   usedNames = new Set<string>()
 ): AST {
   // If we've seen this node before, return it.
-  const existing = processed.get(schema)
+  let existing = processed.get(schema)
+  if (!existing && typeof schema === 'object' && schema && (schema as Exclude<typeof schema, any[]>).title) {
+    const title = (schema as Exclude<typeof schema, any[]>).title
+    for (let iterKeys = processed.keys(), iter = iterKeys.next(); !iter.done; iter = iterKeys.next()) {
+      const candidate = iter.value
+      if (
+        typeof candidate === 'object' &&
+        candidate &&
+        (candidate as Exclude<typeof candidate, any[]>).title === title &&
+        isEqual(schema, candidate)
+      ) {
+        existing = processed.get(candidate)!
+        processed.set(schema, existing)
+      }
+    }
+  }
   if (existing) {
     // But update the keyName if it didn't already have one
     if (keyName && existing.keyName === undefined) {
@@ -41,7 +56,7 @@ export function parse(
   }
 
   const definitions = getDefinitions(rootSchema)
-  const keyNameFromDefinition = findKey(definitions, _ => _ === schema)
+  const keyNameFromDefinition = findKey(definitions, _ => isEqual(_, schema))
 
   // Cache processed ASTs before they are actually computed, then update
   // them in place using set(). This is to avoid cycles.
