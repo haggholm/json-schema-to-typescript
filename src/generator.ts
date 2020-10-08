@@ -15,7 +15,12 @@ import {
   TUnion,
   TTypeReference
 } from './types/AST'
-import {INDEX_KEY_NAME, log, toSafeString} from './utils'
+import {INDEX_KEY_NAME, log, error, toSafeString} from './utils'
+
+const unreachableCase = (value: never) => {
+  error('Unreachable Case!', value)
+  return new Error('Unreachable Case!')
+}
 
 export function generate(ast: AST, options = DEFAULT_OPTIONS): string {
   return (
@@ -181,11 +186,10 @@ function generateRawType(ast: AST, options: Options): string {
   switch (ast.type) {
     case 'ANY':
       return options.unknownAny ? 'unknown' : 'any'
-    case 'ARRAY':
-      return (() => {
-        const type = generateType(ast.params, options)
-        return type.endsWith('"') ? '(' + type + ')[]' : type + '[]'
-      })()
+    case 'ARRAY': {
+      const type = generateType(ast.params, options)
+      return type.endsWith('"') ? '(' + type + ')[]' : type + '[]'
+    }
     case 'BOOLEAN':
       return 'boolean'
     case 'INTERFACE':
@@ -290,6 +294,8 @@ function generateRawType(ast: AST, options: Options): string {
       return ast.params
     case 'TYPE_REFERENCE':
       return generateEnumReference(ast)
+    default:
+      throw unreachableCase(ast)
   }
 }
 
@@ -302,12 +308,12 @@ function generateSetOperation(ast: TIntersection | TUnion, options: Options): st
   return members.length === 1 ? members[0] : '(' + members.join(' ' + separator + ' ') + ')'
 }
 
-function generateInterface(ast: TInterface, options: Options): string {
-  const genericValues = ast.tsGenericValues || {}
+function generateInterface(interfaceAst: TInterface, options: Options): string {
+  const genericValues = interfaceAst.tsGenericValues || {}
   return (
     `{` +
     '\n' +
-    ast.params
+    interfaceAst.params
       .filter(_ => !_.isPatternProperty && !_.isUnreachableDefinition)
       .map(
         ({isRequired, keyName, ast}) =>
@@ -316,7 +322,7 @@ function generateInterface(ast: TInterface, options: Options): string {
       .map(
         ([isRequired, keyName, ast, type]) =>
           (hasComment(ast) && !ast.standaloneName ? generateComment(ast.comment) + '\n' : '') +
-          escapeKeyName(keyName) +
+          escapeKeyName(keyName, interfaceAst.paramsKeyType) +
           (isRequired ? '' : '?') +
           ': ' +
           (hasStandaloneName(ast) ? toSafeString(type) : type) +
@@ -372,11 +378,14 @@ function generateStandaloneType(ast: ASTWithStandaloneName, options: Options): s
   )
 }
 
-function escapeKeyName(keyName: string): string {
+function escapeKeyName(keyName: string, hasKeyType?: object | boolean): string {
+  if (hasKeyType) {
+    return keyName
+  }
   if (keyName.length && /[A-Za-z_$]/.test(keyName.charAt(0)) && /^[\w$]+$/.test(keyName)) {
     return keyName
   }
-  if (keyName === '[k: string]') {
+  if (keyName === INDEX_KEY_NAME) {
     return keyName
   }
   return JSON.stringify(keyName)

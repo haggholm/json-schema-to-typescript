@@ -17,7 +17,12 @@ import {
   TInterfaceIntersection
 } from './types/AST'
 import {JSONSchema, JSONSchemaWithDefinitions, SchemaSchema} from './types/JSONSchema'
-import {INDEX_KEY_NAME, generateName, log} from './utils'
+import {INDEX_KEY_NAME, generateName, log, error} from './utils'
+
+const raise = (message: string, ...messages: any[]): never => {
+  error(message, ...messages)
+  throw new Error(message)
+}
 
 export type Processed = Map<JSONSchema | JSONSchema4Type, AST>
 
@@ -148,7 +153,8 @@ function parseNonLiteral(
           ast: parse(_, options, rootSchema, undefined, false, processed, usedNames),
           keyName: schema.tsEnumNames![n]
         })),
-        standaloneName: standaloneName(schema, keyName, usedNames)!,
+        standaloneName:
+          standaloneName(schema, keyName, usedNames) || raise('Named enum requires a standalone name', schema),
         type: 'ENUM'
       })
     case 'NAMED_SCHEMA':
@@ -388,6 +394,7 @@ function newInterface(
       tsGenericParams: schema.tsGenericParams,
       tsGenericValues: schema.tsGenericValues
     }
+    // TODO: handle "required".
     if (params.length === 0) {
       additionalProp.keyName = `[K in ${paramsKeyType.standaloneName}]`
       return {...mappedType, ...rootType}
