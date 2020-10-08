@@ -3,6 +3,8 @@ import {deburr, isPlainObject, mapValues, trim, upperFirst} from 'lodash'
 import {basename, dirname, extname, join, normalize, sep} from 'path'
 import {JSONSchema, JSONSchemaDefinition} from './types/JSONSchema'
 
+export const INDEX_KEY_NAME = '[k: string]'
+
 // TODO: pull out into a separate package
 export function Try<T>(fn: () => T, err: (e: Error) => any): T {
   try {
@@ -250,4 +252,25 @@ export function pathTransform(outputPath: string, inputPath: string, filePath: s
   const filePathRel = filePathList.filter((f, i) => f !== inPathList[i])
 
   return join(normalize(outputPath), ...filePathRel)
+}
+
+export function extractStrings(schema: JSONSchema): string[] | null {
+  if (schema.enum) {
+    return schema.enum.filter((value): value is string => typeof value === 'string')
+  }
+  const unionItems = schema.oneOf || schema.anyOf
+  if (!unionItems) {
+    return null
+  }
+  let results: string[] = []
+  for (const item of unionItems) {
+    if (typeof item !== 'boolean') {
+      const subresult = extractStrings(item)
+      if (!subresult) {
+        return null
+      }
+      results = results.concat(subresult)
+    }
+  }
+  return results
 }

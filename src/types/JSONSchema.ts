@@ -82,6 +82,11 @@ export interface JSONSchema extends Omit<JSONSchema4, IncompatibleKeys>, Omit<JS
    * schema extension to support generic parameter values
    */
   tsGenericValues?: {[key: string]: string[]}
+  /**
+   * schema extension to use inside of an "allOf" to note that this type should
+   * "extends" the other types in the allOf, instead of using intersection.
+   */
+  tsExtendAllOf?: boolean
 }
 
 // const SCHEMA_PROPERTIES = [
@@ -94,7 +99,7 @@ export interface JSONSchema extends Omit<JSONSchema4, IncompatibleKeys>, Omit<JS
 //   return []
 // }
 
-export interface NormalizedJSONSchema extends Omit<JSONSchema, IncompatibleKeys> {
+export interface NormalizedJSONSchema extends JSONSchema {
   additionalItems?: boolean | NormalizedJSONSchema
   additionalProperties: boolean | NormalizedJSONSchema
   items?: NormalizedJSONSchema | NormalizedJSONSchema[]

@@ -15,7 +15,7 @@ import {
   TUnion,
   TTypeReference
 } from './types/AST'
-import {log, toSafeString} from './utils'
+import {INDEX_KEY_NAME, log, toSafeString} from './utils'
 
 export function generate(ast: AST, options = DEFAULT_OPTIONS): string {
   return (
@@ -79,7 +79,7 @@ function declareNamedInterfaces(ast: AST, options: Options, rootASTName: string,
       type = [
         hasStandaloneName(ast) &&
           (ast.standaloneName === rootASTName || options.declareExternallyReferenced) &&
-          generateStandaloneInterface(ast, options),
+          (ast.paramsKeyType ? generateStandaloneType(ast, options) : generateStandaloneInterface(ast, options)),
         getSuperTypesAndParams(ast)
           .map(ast => declareNamedInterfaces(ast, options, rootASTName, processed))
           .filter(Boolean)
@@ -164,7 +164,7 @@ function declareNamedTypes(ast: AST, options: Options, rootASTName: string, proc
 function generateType(ast: AST, options: Options): string {
   const type = generateRawType(ast, options)
 
-  if (options.strictIndexSignatures && ast.keyName === '[k: string]') {
+  if (options.strictIndexSignatures && ast.keyName === INDEX_KEY_NAME) {
     return `${type} | undefined`
   }
 
@@ -383,5 +383,9 @@ function escapeKeyName(keyName: string): string {
 }
 
 function getSuperTypesAndParams(ast: TInterface): AST[] {
-  return ast.params.map(param => param.ast).concat(ast.superTypes)
+  const asts = ast.params.map(param => param.ast).concat(ast.superTypes)
+  if (ast.paramsKeyType) {
+    asts.push(ast.paramsKeyType)
+  }
+  return asts
 }

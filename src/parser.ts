@@ -12,10 +12,12 @@ import {
   TInterface,
   TInterfaceParam,
   TNamedInterface,
-  TTuple
+  TTuple,
+  TNamedInterfaceIntersection,
+  TInterfaceIntersection
 } from './types/AST'
 import {JSONSchema, JSONSchemaWithDefinitions, SchemaSchema} from './types/JSONSchema'
-import {generateName, log} from './utils'
+import {INDEX_KEY_NAME, generateName, log} from './utils'
 
 export type Processed = Map<JSONSchema | JSONSchema4Type, AST>
 
@@ -325,6 +327,9 @@ function standaloneName(
   }
 }
 
+/**
+ * New interface _OR_ named object definition
+ */
 function newInterface(
   schema: SchemaSchema,
   options: Options,
@@ -333,12 +338,73 @@ function newInterface(
   usedNames: UsedNames,
   keyName?: string,
   keyNameFromDefinition?: string
-): TInterface {
+): TInterface | TInterfaceIntersection {
   const name = standaloneName(schema, keyNameFromDefinition, usedNames)!
+  const params = parseSchema(schema, options, rootSchema, processed, usedNames, name)
+
+  const propertyNamesSchema = schema.propertyNames
+  if (
+    propertyNamesSchema &&
+    propertyNamesSchema !== true &&
+    !((propertyNamesSchema.pattern || propertyNamesSchema.format) && !propertyNamesSchema.enum)
+  ) {
+    if (schema.extends) {
+      // Don't use < draft4 features with a draft6+ feature.
+      throw Error(format('Supertype forbidden with propertyNames!', schema))
+    }
+    const paramsKeyType = parse(propertyNamesSchema, options, rootSchema, undefined, true, processed, usedNames)
+    const comment = `This interface was referenced by \`${name}\`'s JSON-Schema definition
+  via \`propertyNames\`.`
+    paramsKeyType.comment = paramsKeyType.comment ? `${paramsKeyType.comment}\n\n${comment}` : comment
+
+    if (!hasStandaloneName(paramsKeyType)) {
+      throw Error(format('Type for property names must have standalone name!', propertyNamesSchema, paramsKeyType))
+    }
+
+    const additionalPropIndex = params.findIndex(param => param.keyName === INDEX_KEY_NAME)
+    const additionalProp: TInterfaceParam =
+      additionalPropIndex >= 0
+        ? params[additionalPropIndex]
+        : {
+            ast: {type: 'ANY'},
+            keyName: INDEX_KEY_NAME,
+            isPatternProperty: false,
+            isRequired: false,
+            isUnreachableDefinition: false
+          }
+    if (additionalPropIndex >= 0) {
+      params.splice(additionalPropIndex, 1)
+    }
+    const mappedType: TInterface = {
+      paramsKeyType,
+      params: [additionalProp],
+      superTypes: [],
+      type: 'INTERFACE'
+    }
+    const rootType = {
+      keyName,
+      standaloneName: name,
+      comment: schema.description,
+      tsGenericParams: schema.tsGenericParams,
+      tsGenericValues: schema.tsGenericValues
+    }
+    if (params.length === 0) {
+      additionalProp.keyName = `[K in ${paramsKeyType.standaloneName}]`
+      return {...mappedType, ...rootType}
+    }
+    const knownKeys = params.map(param => JSON.stringify(param.keyName)).join(' | ')
+    additionalProp.keyName = `[K in Exclude<${paramsKeyType.standaloneName}, ${knownKeys}>]`
+    return {
+      ...rootType,
+      params: [mappedType, {params, superTypes: [], type: 'INTERFACE'}],
+      type: 'INTERSECTION'
+    }
+  }
+
   return {
     comment: schema.description,
     keyName,
-    params: parseSchema(schema, options, rootSchema, processed, usedNames, name),
+    params,
     standaloneName: name,
     superTypes: parseSuperTypes(schema, options, processed, usedNames),
     tsGenericParams: schema.tsGenericParams,
@@ -352,7 +418,7 @@ function parseSuperTypes(
   options: Options,
   processed: Processed,
   usedNames: UsedNames
-): TNamedInterface[] {
+): (TNamedInterface | TNamedInterfaceIntersection)[] {
   // Type assertion needed because of dereferencing step
   // TODO: Type it upstream
   const superTypes = schema.extends as SchemaSchema | SchemaSchema[] | undefined
@@ -371,7 +437,7 @@ function newNamedInterface(
   rootSchema: JSONSchema,
   processed: Processed,
   usedNames: UsedNames
-): TNamedInterface {
+): TNamedInterface | TNamedInterfaceIntersection {
   const namedInterface = newInterface(schema, options, rootSchema, processed, usedNames)
   if (hasStandaloneName(namedInterface)) {
     return namedInterface
@@ -417,7 +483,7 @@ via the \`patternProperty\` "${key}".`
           isPatternProperty: !singlePatternProperty,
           isRequired: singlePatternProperty || includes(schema.required || [], key),
           isUnreachableDefinition: false,
-          keyName: singlePatternProperty ? '[k: string]' : key
+          keyName: singlePatternProperty ? INDEX_KEY_NAME : key
         }
       })
     )
@@ -452,7 +518,7 @@ via the \`definition\` "${key}".`
         isPatternProperty: false,
         isRequired: true,
         isUnreachableDefinition: false,
-        keyName: '[k: string]'
+        keyName: INDEX_KEY_NAME
       })
 
     case undefined:
@@ -463,11 +529,11 @@ via the \`definition\` "${key}".`
     // defined via index signatures are already optional
     default:
       return asts.concat({
-        ast: parse(schema.additionalProperties, options, rootSchema, '[k: string]', true, processed, usedNames),
+        ast: parse(schema.additionalProperties, options, rootSchema, INDEX_KEY_NAME, true, processed, usedNames),
         isPatternProperty: false,
         isRequired: true,
         isUnreachableDefinition: false,
-        keyName: '[k: string]'
+        keyName: INDEX_KEY_NAME
       })
   }
 }
