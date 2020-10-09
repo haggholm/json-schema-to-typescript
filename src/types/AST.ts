@@ -3,7 +3,7 @@ import { JSONSchema4Type } from 'json-schema'
 export type AST_TYPE = AST['type']
 
 export type AST = TAny | TArray | TBoolean | TEnum | TInterface | TNamedInterface
-  | TIntersection | TLiteral | TNumber | TNull | TObject | TReference
+  | TIntersection | TLiteral | TNever | TNumber | TNull | TObject | TReference
   | TString | TTuple | TUnion | TCustomType | TTypeReference
 
 export interface AbstractAST {
@@ -60,18 +60,14 @@ export interface TTypeReference extends AbstractAST {
 export interface TInterface extends AbstractAST {
   type: 'INTERFACE'
   params: TInterfaceParam[]
-  superTypes: TNamedInterface[]
+  superTypes: (TNamedInterface | TNamedInterfaceIntersection)[]
+  paramsKeyType?: ASTWithStandaloneName
   tsGenericParams?: string[]
   tsGenericValues?: { [name: string]: string[] }
 }
 
-export interface TNamedInterface extends AbstractAST {
+export interface TNamedInterface extends TInterface {
   standaloneName: string
-  type: 'INTERFACE'
-  params: TInterfaceParam[]
-  superTypes: TNamedInterface[]
-  tsGenericParams?: string[]
-  tsGenericValues?: { [name: string]: string[] }
 }
 
 export interface TInterfaceParam {
@@ -85,11 +81,25 @@ export interface TInterfaceParam {
 export interface TIntersection extends AbstractAST {
   type: 'INTERSECTION'
   params: AST[]
+  tsGenericParams?: string[]
+  tsGenericValues?: { [name: string]: string[] }
+}
+
+export interface TInterfaceIntersection extends TIntersection {
+  params: TInterface[]
+}
+
+export interface TNamedInterfaceIntersection extends TInterfaceIntersection {
+  standaloneName: string
 }
 
 export interface TLiteral extends AbstractAST {
   params: JSONSchema4Type
   type: 'LITERAL'
+}
+
+export interface TNever extends AbstractAST {
+  type: 'NEVER'
 }
 
 export interface TNumber extends AbstractAST {
@@ -124,6 +134,8 @@ export interface TTuple extends AbstractAST {
 export interface TUnion extends AbstractAST {
   type: 'UNION'
   params: AST[]
+  tsGenericParams?: string[]
+  tsGenericValues?: { [name: string]: string[] }
 }
 
 export interface TCustomType extends AbstractAST {

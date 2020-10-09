@@ -1,7 +1,9 @@
 import {whiteBright} from 'cli-color'
 import {deburr, isPlainObject, mapValues, trim, upperFirst} from 'lodash'
 import {basename, dirname, extname, join, normalize, sep} from 'path'
-import {JSONSchema} from './types/JSONSchema'
+import {JSONSchema, JSONSchemaDefinition} from './types/JSONSchema'
+
+export const INDEX_KEY_NAME = '[k: string]'
 
 // TODO: pull out into a separate package
 export function Try<T>(fn: () => T, err: (e: Error) => any): T {
@@ -77,22 +79,24 @@ const BLACKLISTED_KEYS = new Set([
   'oneOf',
   'not'
 ])
-function traverseObjectKeys(obj: Record<string, JSONSchema>, callback: (schema: JSONSchema, isRoot: boolean) => void) {
+
+type TraverseCallback = (schema: JSONSchemaDefinition, isRoot: boolean) => void
+function traverseObjectKeys(obj: Record<string, JSONSchemaDefinition | any[]>, callback: TraverseCallback) {
   Object.keys(obj).forEach(k => {
-    if (obj[k] && typeof obj[k] === 'object' && !Array.isArray(obj[k])) {
-      traverse(obj[k], callback, false)
+    const item = obj[k]
+    if (item && typeof item === 'object' && !Array.isArray(item)) {
+      traverse(item, callback, false)
     }
   })
 }
-function traverseArray(arr: JSONSchema[], callback: (schema: JSONSchema, isRoot: boolean) => void) {
+function traverseArray(arr: JSONSchemaDefinition[], callback: TraverseCallback) {
   arr.forEach(i => traverse(i, callback, false))
 }
-export function traverse(
-  schema: JSONSchema,
-  callback: (schema: JSONSchema, isRoot: boolean) => void,
-  isRoot: boolean
-): void {
+export function traverse(schema: JSONSchemaDefinition, callback: TraverseCallback, isRoot: boolean): void {
   callback(schema, isRoot)
+  if (typeof schema === 'boolean') {
+    return
+  }
 
   if (schema.anyOf) {
     traverseArray(schema.anyOf, callback)
@@ -248,4 +252,25 @@ export function pathTransform(outputPath: string, inputPath: string, filePath: s
   const filePathRel = filePathList.filter((f, i) => f !== inPathList[i])
 
   return join(normalize(outputPath), ...filePathRel)
+}
+
+export function extractStrings(schema: JSONSchema): string[] | null {
+  if (schema.enum) {
+    return schema.enum.filter((value): value is string => typeof value === 'string')
+  }
+  const unionItems = schema.oneOf || schema.anyOf
+  if (!unionItems) {
+    return null
+  }
+  let results: string[] = []
+  for (const item of unionItems) {
+    if (typeof item !== 'boolean') {
+      const subresult = extractStrings(item)
+      if (!subresult) {
+        return null
+      }
+      results = results.concat(subresult)
+    }
+  }
+  return results
 }

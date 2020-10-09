@@ -1,6 +1,6 @@
 import {whiteBright} from 'cli-color'
 import {JSONSchema4Type, JSONSchema4TypeName} from 'json-schema'
-import {findKey, includes, isPlainObject, map} from 'lodash'
+import {isEqual, findKey, includes, isPlainObject, map} from 'lodash'
 import {format} from 'util'
 import {Options} from './'
 import {typeOfSchema} from './typeOfSchema'
@@ -12,10 +12,17 @@ import {
   TInterface,
   TInterfaceParam,
   TNamedInterface,
-  TTuple
+  TTuple,
+  TNamedInterfaceIntersection,
+  TInterfaceIntersection
 } from './types/AST'
 import {JSONSchema, JSONSchemaWithDefinitions, SchemaSchema} from './types/JSONSchema'
-import {generateName, log} from './utils'
+import {INDEX_KEY_NAME, generateName, log, error} from './utils'
+
+const raise = (message: string, ...messages: any[]): never => {
+  error(message, ...messages)
+  throw new Error(message)
+}
 
 export type Processed = Map<JSONSchema | JSONSchema4Type, AST>
 
@@ -31,7 +38,16 @@ export function parse(
   usedNames = new Set<string>()
 ): AST {
   // If we've seen this node before, return it.
-  const existing = processed.get(schema)
+  let existing = processed.get(schema)
+  if (!existing && typeof schema === 'object' && schema) {
+    for (let iterKeys = processed.keys(), iter = iterKeys.next(); !iter.done; iter = iterKeys.next()) {
+      const candidate = iter.value
+      if (typeof candidate === 'object' && candidate && isEqual(schema, candidate)) {
+        existing = processed.get(candidate)!
+        processed.set(schema, existing)
+      }
+    }
+  }
   if (existing) {
     // But update the keyName if it didn't already have one
     if (keyName && existing.keyName === undefined) {
@@ -41,7 +57,7 @@ export function parse(
   }
 
   const definitions = getDefinitions(rootSchema)
-  const keyNameFromDefinition = findKey(definitions, _ => _ === schema)
+  const keyNameFromDefinition = findKey(definitions, _ => isEqual(_, schema))
 
   // Cache processed ASTs before they are actually computed, then update
   // them in place using set(). This is to avoid cycles.
@@ -87,7 +103,7 @@ function parseNonLiteral(
   set: (ast: AST) => AST,
   processed: Processed,
   usedNames: UsedNames
-) {
+): AST {
   log(whiteBright.bgBlue('parser'), schema, '<-' + typeOfSchema(schema), processed.has(schema) ? '(FROM CACHE)' : '')
 
   switch (typeOfSchema(schema)) {
@@ -137,11 +153,19 @@ function parseNonLiteral(
           ast: parse(_, options, rootSchema, undefined, false, processed, usedNames),
           keyName: schema.tsEnumNames![n]
         })),
-        standaloneName: standaloneName(schema, keyName, usedNames)!,
+        standaloneName:
+          standaloneName(schema, keyName, usedNames) || raise('Named enum requires a standalone name', schema),
         type: 'ENUM'
       })
     case 'NAMED_SCHEMA':
       return set(newInterface(schema as SchemaSchema, options, rootSchema, processed, usedNames, keyName))
+    case 'NEVER':
+      return set({
+        comment: schema.description,
+        keyName,
+        standaloneName: standaloneName(schema, keyNameFromDefinition, usedNames),
+        type: 'NEVER'
+      })
     case 'NULL':
       return set({
         comment: schema.description,
@@ -309,6 +333,9 @@ function standaloneName(
   }
 }
 
+/**
+ * New interface _OR_ named object definition
+ */
 function newInterface(
   schema: SchemaSchema,
   options: Options,
@@ -317,12 +344,74 @@ function newInterface(
   usedNames: UsedNames,
   keyName?: string,
   keyNameFromDefinition?: string
-): TInterface {
+): TInterface | TInterfaceIntersection {
   const name = standaloneName(schema, keyNameFromDefinition, usedNames)!
+  const params = parseSchema(schema, options, rootSchema, processed, usedNames, name)
+
+  const propertyNamesSchema = schema.propertyNames
+  if (
+    propertyNamesSchema &&
+    propertyNamesSchema !== true &&
+    !((propertyNamesSchema.pattern || propertyNamesSchema.format) && !propertyNamesSchema.enum)
+  ) {
+    if (schema.extends) {
+      // Don't use < draft4 features with a draft6+ feature.
+      throw Error(format('Supertype forbidden with propertyNames!', schema))
+    }
+    const paramsKeyType = parse(propertyNamesSchema, options, rootSchema, undefined, true, processed, usedNames)
+    const comment = `This interface was referenced by \`${name}\`'s JSON-Schema definition
+  via \`propertyNames\`.`
+    paramsKeyType.comment = paramsKeyType.comment ? `${paramsKeyType.comment}\n\n${comment}` : comment
+
+    if (!hasStandaloneName(paramsKeyType)) {
+      throw Error(format('Type for property names must have standalone name!', propertyNamesSchema, paramsKeyType))
+    }
+
+    const additionalPropIndex = params.findIndex(param => param.keyName === INDEX_KEY_NAME)
+    const additionalProp: TInterfaceParam =
+      additionalPropIndex >= 0
+        ? params[additionalPropIndex]
+        : {
+            ast: {type: 'ANY'},
+            keyName: INDEX_KEY_NAME,
+            isPatternProperty: false,
+            isRequired: false,
+            isUnreachableDefinition: false
+          }
+    if (additionalPropIndex >= 0) {
+      params.splice(additionalPropIndex, 1)
+    }
+    const mappedType: TInterface = {
+      paramsKeyType,
+      params: [additionalProp],
+      superTypes: [],
+      type: 'INTERFACE'
+    }
+    const rootType = {
+      keyName,
+      standaloneName: name,
+      comment: schema.description,
+      tsGenericParams: schema.tsGenericParams,
+      tsGenericValues: schema.tsGenericValues
+    }
+    // TODO: handle "required".
+    if (params.length === 0) {
+      additionalProp.keyName = `[K in ${paramsKeyType.standaloneName}]`
+      return {...mappedType, ...rootType}
+    }
+    const knownKeys = params.map(param => JSON.stringify(param.keyName)).join(' | ')
+    additionalProp.keyName = `[K in Exclude<${paramsKeyType.standaloneName}, ${knownKeys}>]`
+    return {
+      ...rootType,
+      params: [mappedType, {params, superTypes: [], type: 'INTERFACE'}],
+      type: 'INTERSECTION'
+    }
+  }
+
   return {
     comment: schema.description,
     keyName,
-    params: parseSchema(schema, options, rootSchema, processed, usedNames, name),
+    params,
     standaloneName: name,
     superTypes: parseSuperTypes(schema, options, processed, usedNames),
     tsGenericParams: schema.tsGenericParams,
@@ -336,7 +425,7 @@ function parseSuperTypes(
   options: Options,
   processed: Processed,
   usedNames: UsedNames
-): TNamedInterface[] {
+): (TNamedInterface | TNamedInterfaceIntersection)[] {
   // Type assertion needed because of dereferencing step
   // TODO: Type it upstream
   const superTypes = schema.extends as SchemaSchema | SchemaSchema[] | undefined
@@ -355,7 +444,7 @@ function newNamedInterface(
   rootSchema: JSONSchema,
   processed: Processed,
   usedNames: UsedNames
-): TNamedInterface {
+): TNamedInterface | TNamedInterfaceIntersection {
   const namedInterface = newInterface(schema, options, rootSchema, processed, usedNames)
   if (hasStandaloneName(namedInterface)) {
     return namedInterface
@@ -401,7 +490,7 @@ via the \`patternProperty\` "${key}".`
           isPatternProperty: !singlePatternProperty,
           isRequired: singlePatternProperty || includes(schema.required || [], key),
           isUnreachableDefinition: false,
-          keyName: singlePatternProperty ? '[k: string]' : key
+          keyName: singlePatternProperty ? INDEX_KEY_NAME : key
         }
       })
     )
@@ -436,7 +525,7 @@ via the \`definition\` "${key}".`
         isPatternProperty: false,
         isRequired: true,
         isUnreachableDefinition: false,
-        keyName: '[k: string]'
+        keyName: INDEX_KEY_NAME
       })
 
     case undefined:
@@ -447,11 +536,11 @@ via the \`definition\` "${key}".`
     // defined via index signatures are already optional
     default:
       return asts.concat({
-        ast: parse(schema.additionalProperties, options, rootSchema, '[k: string]', true, processed, usedNames),
+        ast: parse(schema.additionalProperties, options, rootSchema, INDEX_KEY_NAME, true, processed, usedNames),
         isPatternProperty: false,
         isRequired: true,
         isUnreachableDefinition: false,
-        keyName: '[k: string]'
+        keyName: INDEX_KEY_NAME
       })
   }
 }

@@ -1,10 +1,13 @@
-import {isPlainObject} from 'lodash'
-import {JSONSchema, SCHEMA_TYPE} from './types/JSONSchema'
+import {isPlainObject, isEmpty} from 'lodash'
+import {JSONSchemaDefinition, SCHEMA_TYPE} from './types/JSONSchema'
 
 /**
  * Duck types a JSONSchema schema or property to determine which kind of AST node to parse it into.
  */
-export function typeOfSchema(schema: JSONSchema): SCHEMA_TYPE {
+export function typeOfSchema(schema: JSONSchemaDefinition): SCHEMA_TYPE {
+  if (typeof schema === 'boolean') {
+    return schema ? 'ANY' : 'NEVER'
+  }
   if (schema.tsType) return 'CUSTOM_TYPE'
   if (schema.allOf) return 'ALL_OF'
   if (schema.anyOf) return 'ANY_OF'
@@ -45,5 +48,8 @@ export function typeOfSchema(schema: JSONSchema): SCHEMA_TYPE {
   }
   if (schema.id) return 'NAMED_SCHEMA'
   if (isPlainObject(schema) && Object.keys(schema).length) return 'UNNAMED_SCHEMA'
+  if (schema.not === true || (isPlainObject(schema.not) && isEmpty(schema.not))) {
+    return 'NEVER'
+  }
   return 'ANY'
 }
