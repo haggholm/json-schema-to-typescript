@@ -107,7 +107,28 @@ function parseNonLiteral(
   log(whiteBright.bgBlue('parser'), schema, '<-' + typeOfSchema(schema), processed.has(schema) ? '(FROM CACHE)' : '')
 
   switch (typeOfSchema(schema)) {
-    case 'ALL_OF':
+    case 'ALL_OF': {
+      const extendsIndex = schema.allOf!.findIndex(_ => typeof _ !== 'boolean' && _.tsExtendAllOf)
+      if (extendsIndex >= 0) {
+        const name = standaloneName(schema, undefined, usedNames)!
+        const target = schema.allOf![extendsIndex] as SchemaSchema
+        return set({
+          comment: schema.description,
+          keyName,
+          params: parseSchema(target, options, rootSchema, processed, usedNames, name),
+          standaloneName: name,
+          superTypes: schema
+            .allOf!.filter((_, i) => i !== extendsIndex)
+            .map(_ =>
+              ensureNamedInterface(
+                parse(_ as SchemaSchema | boolean, options, rootSchema, undefined, true, processed, usedNames)
+              )
+            ),
+          tsGenericParams: schema.tsGenericParams,
+          tsGenericValues: schema.tsGenericValues,
+          type: 'INTERFACE'
+        })
+      }
       return set({
         comment: schema.description,
         keyName,
@@ -115,6 +136,7 @@ function parseNonLiteral(
         standaloneName: standaloneName(schema, keyNameFromDefinition, usedNames),
         type: 'INTERSECTION'
       })
+    }
     case 'ANY':
       return set({
         comment: schema.description,
@@ -439,18 +461,36 @@ function parseSuperTypes(
 }
 
 function newNamedInterface(
-  schema: SchemaSchema,
+  schema: SchemaSchema | boolean,
   options: Options,
   rootSchema: JSONSchema,
   processed: Processed,
   usedNames: UsedNames
 ): TNamedInterface | TNamedInterfaceIntersection {
+  if (typeof schema === 'boolean') {
+    throw Error(format('Supertype must not be any or never!'))
+  }
   const namedInterface = newInterface(schema, options, rootSchema, processed, usedNames)
   if (hasStandaloneName(namedInterface)) {
     return namedInterface
   }
   // TODO: Generate name if it doesn't have one
   throw Error(format('Supertype must have standalone name!', namedInterface))
+}
+
+function ensureNamedInterface(ast: AST): TNamedInterface | TNamedInterfaceIntersection {
+  if (!ast.standaloneName) {
+    throw Error(format('Supertype must have standalone name!', ast))
+  }
+  switch (ast.type) {
+    case 'INTERFACE':
+      return ast as TNamedInterface
+    case 'INTERSECTION':
+      if (ast.params.every(p => p.type === 'INTERFACE')) {
+        return ast as TNamedInterfaceIntersection
+      }
+  }
+  throw Error(format('Invalid supertype!', ast))
 }
 
 /**
