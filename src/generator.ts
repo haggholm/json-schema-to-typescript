@@ -295,6 +295,7 @@ function generateRawType(ast: AST, options: Options): string {
     case 'TYPE_REFERENCE':
       return generateEnumReference(ast)
     default:
+      error('Standalone name ("title") required for item', ast)
       throw unreachableCase(ast)
   }
 }
