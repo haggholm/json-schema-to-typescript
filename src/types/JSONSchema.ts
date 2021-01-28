@@ -1,6 +1,7 @@
-import {JSONSchema4, JSONSchema4TypeName, JSONSchema6} from 'json-schema'
+import {JSONSchema4, JSONSchema4Type, JSONSchema4TypeName, JSONSchema6} from 'json-schema'
+import {isPlainObject, memoize} from 'lodash'
 
-export type SCHEMA_TYPE =
+export type SchemaType =
   | 'ALL_OF'
   | 'UNNAMED_SCHEMA'
   | 'ANY'
@@ -22,6 +23,7 @@ export type SCHEMA_TYPE =
   | 'NEVER'
 
 export type JSONSchemaTypeName = JSONSchema4TypeName
+export type JSONSchemaType = JSONSchema4Type
 
 export type JSONSchemaDefinition = boolean | JSONSchema
 type IncompatibleKeys =
@@ -89,19 +91,40 @@ export interface JSONSchema extends Omit<JSONSchema4, IncompatibleKeys>, Omit<JS
   tsExtendAllOf?: boolean
 }
 
-// const SCHEMA_PROPERTIES = [
-//   'additionalItems', 'additionalProperties', 'items', 'definitions',
-//   'properties', 'patternProperties', 'dependencies', 'allOf', 'anyOf',
-//   'oneOf', 'not', 'required', '$schema', 'title', 'description',
-// ]
+export const Parent = Symbol('Parent')
 
-// export function isSchema(a: any): a is SchemaSchema {
-//   return []
-// }
+export interface LinkedJSONSchema extends JSONSchema {
+  /**
+   * A reference to this schema's parent node, for convenience.
+   * `null` when this is the root schema.
+   */
+  [Parent]: LinkedJSONSchema | null
 
-export interface NormalizedJSONSchema extends JSONSchema {
+  additionalItems?: boolean | LinkedJSONSchema
+  additionalProperties: boolean | LinkedJSONSchema
+  items?: LinkedJSONSchema | LinkedJSONSchema[]
+  definitions?: {
+    [k: string]: LinkedJSONSchema
+  }
+  properties?: {
+    [k: string]: LinkedJSONSchema
+  }
+  patternProperties?: {
+    [k: string]: LinkedJSONSchema
+  }
+  dependencies?: {
+    [k: string]: LinkedJSONSchema | string[]
+  }
+  allOf?: LinkedJSONSchema[]
+  anyOf?: LinkedJSONSchema[]
+  oneOf?: LinkedJSONSchema[]
+  not?: LinkedJSONSchema
+}
+
+export interface NormalizedJSONSchema extends LinkedJSONSchema {
   additionalItems?: boolean | NormalizedJSONSchema
   additionalProperties: boolean | NormalizedJSONSchema
+  extends?: string[]
   items?: NormalizedJSONSchema | NormalizedJSONSchema[]
   definitions?: {
     [k: string]: NormalizedJSONSchema
@@ -145,4 +168,18 @@ export interface JSONSchemaWithDefinitions extends NormalizedJSONSchema {
 
 export interface CustomTypeJSONSchema extends NormalizedJSONSchema {
   tsType: string
+}
+
+export const getRootSchema = memoize(
+  (schema: LinkedJSONSchema): LinkedJSONSchema => {
+    const parent = schema[Parent]
+    if (!parent) {
+      return schema
+    }
+    return getRootSchema(parent)
+  }
+)
+
+export function isPrimitive(schema: LinkedJSONSchema | JSONSchemaType): schema is JSONSchemaType {
+  return !isPlainObject(schema)
 }

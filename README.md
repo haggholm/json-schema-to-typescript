@@ -87,6 +87,7 @@ See [server demo](example) and [browser demo](https://github.com/bcherny/json-sc
 | cwd | string | `process.cwd()` | Root directory for resolving [`$ref`](https://tools.ietf.org/id/draft-pbryan-zyp-json-ref-03.html)s |
 | declareExternallyReferenced | boolean | `true` | Declare external schemas referenced via `$ref`? |
 | enableConstEnums | boolean | `true` | Prepend enums with [`const`](https://www.typescriptlang.org/docs/handbook/enums.html#computed-and-constant-members)? |
+| format | boolean | `true` | Format code? Set this to `false` to improve performance. |
 | ignoreMinAndMaxItems | boolean | `false` | Ignore maxItems and minItems for `array` types, preventing tuples being generated. |
 | style | object | `{ bracketSpacing: false,  printWidth: 120,  semi: true,  singleQuote: false,  tabWidth: 2,  trailingComma: 'none',  useTabs: false }` | A [Prettier](https://prettier.io/docs/en/options.html) configuration |
 | unknownAny | boolean | `true` | Use `unknown` instead of `any` where possible |
@@ -183,6 +184,12 @@ json2ts -i foo.json -o foo.d.ts --style.singleQuote --no-style.semi
 - `oneOf` ("xor", use `anyOf` instead)
 - `pattern` ([string](https://github.com/tdegrunt/jsonschema/blob/67c0e27ce9542efde0bf43dc1b2a95dd87df43c3/examples/all.js#L203), [regex](https://github.com/tdegrunt/jsonschema/blob/67c0e27ce9542efde0bf43dc1b2a95dd87df43c3/examples/all.js#L207))
 - `uniqueItems` ([eg](https://github.com/tdegrunt/jsonschema/blob/67c0e27ce9542efde0bf43dc1b2a95dd87df43c3/examples/all.js#L172))
+
+## FAQ
+
+### JSON-Schema-to-TypeScript is crashing on my giant file. What can I do?
+
+Prettier is known to run slowly on really big files. To skip formatting and improve performance, set the `format` option to `false`.
 
 ## Further Reading
 

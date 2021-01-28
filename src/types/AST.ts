@@ -1,10 +1,27 @@
-import { JSONSchema4Type } from 'json-schema'
+import {JSONSchema4Type} from 'json-schema'
 
 export type AST_TYPE = AST['type']
 
-export type AST = TAny | TArray | TBoolean | TEnum | TInterface | TNamedInterface
-  | TIntersection | TLiteral | TNever | TNumber | TNull | TObject | TReference
-  | TString | TTuple | TUnion | TCustomType | TTypeReference
+export type AST =
+  | TAny
+  | TArray
+  | TBoolean
+  | TEnum
+  | TInterface
+  | TNamedInterface
+  | TIntersection
+  | TLiteral
+  | TNever
+  | TNumber
+  | TNull
+  | TObject
+  | TReference
+  | TString
+  | TTuple
+  | TUnion
+  | TUnknown
+  | TCustomType
+  | TTypeReference
 
 export interface AbstractAST {
   comment?: string
@@ -13,9 +30,9 @@ export interface AbstractAST {
   type: AST_TYPE
 }
 
-export type ASTWithComment = AST & { comment: string }
-export type ASTWithName = AST & { keyName: string }
-export type ASTWithStandaloneName = AST & { standaloneName: string }
+export type ASTWithComment = AST & {comment: string}
+export type ASTWithName = AST & {keyName: string}
+export type ASTWithStandaloneName = AST & {standaloneName: string}
 
 export function hasComment(ast: AST): ast is ASTWithComment {
   return 'comment' in ast && ast.comment != null && ast.comment !== ''
@@ -138,6 +155,10 @@ export interface TUnion extends AbstractAST {
   tsGenericValues?: { [name: string]: string[] }
 }
 
+export interface TUnknown extends AbstractAST {
+  type: 'UNKNOWN'
+}
+
 export interface TCustomType extends AbstractAST {
   type: 'CUSTOM_TYPE'
   params: string
@@ -152,4 +173,13 @@ export const T_ANY: TAny = {
 export const T_ANY_ADDITIONAL_PROPERTIES: TAny & ASTWithName = {
   keyName: '[k: string]',
   type: 'ANY'
+}
+
+export const T_UNKNOWN: TUnknown = {
+  type: 'UNKNOWN'
+}
+
+export const T_UNKNOWN_ADDITIONAL_PROPERTIES: TUnknown & ASTWithName = {
+  keyName: '[k: string]',
+  type: 'UNKNOWN'
 }

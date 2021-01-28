@@ -1,27 +1,16 @@
-import {whiteBright} from 'cli-color'
 import {deburr, isPlainObject, mapValues, trim, upperFirst} from 'lodash'
 import {basename, dirname, extname, join, normalize, sep} from 'path'
-import {JSONSchema, JSONSchemaDefinition} from './types/JSONSchema'
+import {JSONSchema, LinkedJSONSchema} from './types/JSONSchema'
 
 export const INDEX_KEY_NAME = '[k: string]'
 
 // TODO: pull out into a separate package
+// eslint-disable-next-line
 export function Try<T>(fn: () => T, err: (e: Error) => any): T {
   try {
     return fn()
   } catch (e) {
     return err(e as Error)
-  }
-}
-
-/**
- * Depth-first traversal
- */
-export function dft<T, U>(object: {[k: string]: any}, cb: (value: U, key: string) => T): void {
-  for (const key in object) {
-    if (!object.hasOwnProperty(key)) continue
-    if (isPlainObject(object[key])) dft(object[key], cb)
-    cb(object[key], key)
   }
 }
 
@@ -47,6 +36,7 @@ export function mapDeep(object: object, fn: (value: object, key?: string) => obj
 // keys that shouldn't be traversed by the catchall step
 const BLACKLISTED_KEYS = new Set([
   'id',
+  '$id',
   '$schema',
   'title',
   'description',
@@ -80,61 +70,79 @@ const BLACKLISTED_KEYS = new Set([
   'not'
 ])
 
-type TraverseCallback = (schema: JSONSchemaDefinition, isRoot: boolean) => void
-function traverseObjectKeys(obj: Record<string, JSONSchemaDefinition | any[]>, callback: TraverseCallback) {
+function traverseObjectKeys(
+  obj: Record<string, LinkedJSONSchema>,
+  callback: (schema: LinkedJSONSchema) => void,
+  processed: Set<LinkedJSONSchema>
+) {
   Object.keys(obj).forEach(k => {
     const item = obj[k]
     if (item && typeof item === 'object' && !Array.isArray(item)) {
-      traverse(item, callback, false)
+      traverse(item, callback, processed)
     }
   })
 }
-function traverseArray(arr: JSONSchemaDefinition[], callback: TraverseCallback) {
-  arr.forEach(i => traverse(i, callback, false))
+function traverseArray(
+  arr: LinkedJSONSchema[],
+  callback: (schema: LinkedJSONSchema) => void,
+  processed: Set<LinkedJSONSchema>
+) {
+  arr.forEach(i => traverse(i, callback, processed))
 }
-export function traverse(schema: JSONSchemaDefinition, callback: TraverseCallback, isRoot: boolean): void {
-  callback(schema, isRoot)
-  if (typeof schema === 'boolean') {
+export function traverse(
+  schema: LinkedJSONSchema,
+  callback: (schema: LinkedJSONSchema) => void,
+  processed = new Set<LinkedJSONSchema>()
+): void {
+  // Handle recursive schemas
+  if (processed.has(schema)) {
     return
   }
 
+  processed.add(schema)
+  callback(schema)
+
   if (schema.anyOf) {
-    traverseArray(schema.anyOf, callback)
+    traverseArray(schema.anyOf, callback, processed)
   }
   if (schema.allOf) {
-    traverseArray(schema.allOf, callback)
+    traverseArray(schema.allOf, callback, processed)
   }
   if (schema.oneOf) {
-    traverseArray(schema.oneOf, callback)
+    traverseArray(schema.oneOf, callback, processed)
   }
   if (schema.properties) {
-    traverseObjectKeys(schema.properties, callback)
+    traverseObjectKeys(schema.properties, callback, processed)
   }
   if (schema.patternProperties) {
-    traverseObjectKeys(schema.patternProperties, callback)
+    traverseObjectKeys(schema.patternProperties, callback, processed)
   }
   if (schema.additionalProperties && typeof schema.additionalProperties === 'object') {
-    traverse(schema.additionalProperties, callback, false)
+    traverse(schema.additionalProperties, callback, processed)
   }
   if (schema.items) {
     const {items} = schema
     if (Array.isArray(items)) {
-      traverseArray(items, callback)
+      traverseArray(items, callback, processed)
     } else {
-      traverse(items, callback, false)
+      traverse(items, callback, processed)
     }
   }
   if (schema.additionalItems && typeof schema.additionalItems === 'object') {
-    traverse(schema.additionalItems, callback, false)
+    traverse(schema.additionalItems, callback, processed)
   }
   if (schema.dependencies) {
-    traverseObjectKeys(schema.dependencies, callback)
+    if (Array.isArray(schema.dependencies)) {
+      traverseArray(schema.dependencies, callback, processed)
+    } else {
+      traverseObjectKeys(schema.dependencies as LinkedJSONSchema, callback, processed)
+    }
   }
   if (schema.definitions) {
-    traverseObjectKeys(schema.definitions, callback)
+    traverseObjectKeys(schema.definitions, callback, processed)
   }
   if (schema.not) {
-    traverse(schema.not, callback, false)
+    traverse(schema.not, callback, processed)
   }
 
   // technically you can put definitions on any key
@@ -143,7 +151,7 @@ export function traverse(schema: JSONSchemaDefinition, callback: TraverseCallbac
     .forEach(key => {
       const child = schema[key]
       if (child && typeof child === 'object') {
-        traverseObjectKeys(child, callback)
+        traverseObjectKeys(child, callback, processed)
       }
     })
 }
@@ -210,13 +218,48 @@ export function generateName(from: string, usedNames: Set<string>) {
   return name
 }
 
-export function error(...messages: any[]) {
-  console.error(whiteBright.bgRedBright('error'), ...messages)
+export function error(...messages: any[]): void {
+  if (!process.env.VERBOSE) {
+    return console.error(messages)
+  }
+  console.error(getStyledTextForLogging('red')?.('error'), ...messages)
 }
 
-export function log(...messages: any[]) {
-  if (process.env.VERBOSE) {
-    console.info(whiteBright.bgCyan('debug'), ...messages)
+type LogStyle = 'blue' | 'cyan' | 'green' | 'magenta' | 'red' | 'white' | 'yellow'
+
+export function log(style: LogStyle, title: string, ...messages: unknown[]): void {
+  if (!process.env.VERBOSE) {
+    return
+  }
+  let lastMessage = null
+  if (messages.length > 1 && typeof messages[messages.length - 1] !== 'string') {
+    lastMessage = messages.splice(messages.length - 1, 1)
+  }
+  console.info(require('cli-color').whiteBright.bgCyan('debug'), getStyledTextForLogging(style)?.(title), ...messages)
+  if (lastMessage) {
+    console.dir(lastMessage, {depth: 6, maxArrayLength: 6})
+  }
+}
+
+function getStyledTextForLogging(style: LogStyle): ((text: string) => string) | undefined {
+  if (!process.env.VERBOSE) {
+    return
+  }
+  switch (style) {
+    case 'blue':
+      return require('cli-color').whiteBright.bgBlue
+    case 'cyan':
+      return require('cli-color').whiteBright.bgCyan
+    case 'green':
+      return require('cli-color').whiteBright.bgGreen
+    case 'magenta':
+      return require('cli-color').whiteBright.bgMagenta
+    case 'red':
+      return require('cli-color').whiteBright.bgRedBright
+    case 'white':
+      return require('cli-color').black.bgWhite
+    case 'yellow':
+      return require('cli-color').whiteBright.bgYellow
   }
 }
 
