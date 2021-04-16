@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 
+try {
+  const sms = require('source-map-support')
+  sms.install()
+} catch {}
+
 import {whiteBright} from 'cli-color'
 import minimist = require('minimist')
 import {readFile, writeFile, existsSync, lstatSync, readdirSync} from 'mz/fs'
 import * as mkdirp from 'mkdirp'
 import * as _glob from 'glob'
 import isGlob = require('is-glob')
+import * as _ from 'lodash'
 import {promisify} from 'util'
 import {join, resolve, dirname, basename} from 'path'
 import stdin = require('stdin')
@@ -20,7 +26,8 @@ main(
     alias: {
       help: ['h'],
       input: ['i'],
-      output: ['o']
+      output: ['o'],
+      verbose: ['v']
     }
   })
 )
@@ -31,8 +38,22 @@ async function main(argv: minimist.ParsedArgs) {
     process.exit(0)
   }
 
+  if (argv.verbose) {
+    process.env.VERBOSE = '1'
+  }
+
   const argIn: string = argv._[0] || argv.input
   const argOut: string | undefined = argv._[1] || argv.output // the output can be omitted so this can be undefined
+
+  function coerceBool(arg: string) {
+    const value = _.get(argv, arg)
+    const coerced = value === 'true' ? true : value === 'false' ? false : undefined
+    if (coerced !== undefined) {
+      _.set(argv, arg, coerced)
+    }
+  }
+
+  coerceBool('$refOptions.dereference.circular')
 
   const ISGLOB = isGlob(argIn)
   const ISDIR = isDir(argIn)

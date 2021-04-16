@@ -1,3 +1,4 @@
+import $RefParser = require('@apidevtools/json-schema-ref-parser')
 import {whiteBright} from 'cli-color'
 import {JSONSchema4Type, JSONSchema4TypeName} from 'json-schema'
 import {isEqual, findKey, includes, isPlainObject, map} from 'lodash'
@@ -218,6 +219,16 @@ function parseNonLiteral(
         type: 'UNION'
       })
     case 'REFERENCE':
+      if (schema.$ref === '#') {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const {$ref, ...fixedSchema} = schema
+        return parse(fixedSchema, options, rootSchema, keyName, true, processed, usedNames)
+      }
+      const resolver = new $RefParser()
+      resolver.parse(rootSchema)
+      const resolved = resolver.$refs.get(schema.$ref!)
+      log(whiteBright.bgBlue('parser'), schema.$ref, 'resolved', resolved)
+      return parse(resolved, options, rootSchema, keyName, true, processed, usedNames)
       throw Error(format('Refs should have been resolved by the resolver!', schema))
     case 'STRING':
       return set({
