@@ -126,7 +126,26 @@ function parseNonLiteral(
   const keyNameFromDefinition = findKey(definitions, _ => _ === schema)
 
   switch (type) {
-    case 'ALL_OF':
+    case 'ALL_OF': {
+      const extendsIndex = schema.allOf!.findIndex(_ => typeof _ !== 'boolean' && _.tsExtendAllOf)
+      if (extendsIndex >= 0) {
+        const name = standaloneName(schema, undefined, usedNames)!
+        const target = schema.allOf![extendsIndex] as SchemaSchema
+        return {
+          comment: schema.description,
+          keyName,
+          params: parseSchema(target, options, processed, usedNames, name),
+          standaloneName: name,
+          superTypes: schema
+            .allOf!.filter((_, i) => i !== extendsIndex)
+            .map(_ =>
+              ensureNamedInterface(parse(_ as SchemaSchema | boolean, options, undefined, processed, usedNames))
+            ),
+          tsGenericParams: schema.tsGenericParams,
+          tsGenericValues: schema.tsGenericValues,
+          type: 'INTERFACE'
+        }
+      }
       return {
         comment: schema.description,
         keyName,
@@ -134,6 +153,7 @@ function parseNonLiteral(
         params: schema.allOf!.map(_ => parse(_, options, undefined, processed, usedNames)),
         type: 'INTERSECTION'
       }
+    }
     case 'ANY':
       return {
         ...(options.unknownAny ? T_UNKNOWN : T_ANY),
@@ -214,6 +234,18 @@ function parseNonLiteral(
         type: 'UNION'
       }
     case 'REFERENCE':
+      // if (schema.$ref === '#') {
+      //   // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      //   const {$ref, ...fixedSchema} = schema
+      //   return parse(fixedSchema, options, keyName, processed, usedNames)
+      // }
+      // import $RefParser = require('@apidevtools/json-schema-ref-parser')
+      // const resolver = new $RefParser()
+      // const rootSchema = getRootSchema(schema)
+      // resolver.parse(rootSchema)
+      // const resolved = resolver.$refs.get(schema.$ref!)
+      // log('blue', 'parser', schema.$ref, 'resolved', resolved)
+      // return parse(resolved, options, rootSchema, keyName, true, processed, usedNames)
       throw Error(format('Refs should have been resolved by the resolver!', schema))
     case 'STRING':
       return {
@@ -438,6 +470,21 @@ function parseSuperTypes(
     return []
   }
   return superTypes.map(_ => parse(_, options, undefined, processed, usedNames) as TNamedInterface)
+}
+
+function ensureNamedInterface(ast: AST): TNamedInterface | TNamedInterfaceIntersection {
+  if (!ast.standaloneName) {
+    throw Error(format('Supertype must have standalone name!', ast))
+  }
+  switch (ast.type) {
+    case 'INTERFACE':
+      return ast as TNamedInterface
+    case 'INTERSECTION':
+      if (ast.params.every(p => p.type === 'INTERFACE')) {
+        return ast as TNamedInterfaceIntersection
+      }
+  }
+  throw Error(format('Invalid supertype!', ast))
 }
 
 /**
