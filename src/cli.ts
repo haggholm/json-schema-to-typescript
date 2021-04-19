@@ -5,21 +5,16 @@ try {
   sms.install()
 } catch {}
 
-import {whiteBright} from 'cli-color'
 import minimist = require('minimist')
+import getStdin from 'get-stdin'
 import {readFile, writeFile, existsSync, lstatSync, readdirSync} from 'mz/fs'
 import * as mkdirp from 'mkdirp'
-import * as _glob from 'glob'
+import glob from 'glob-promise'
 import isGlob = require('is-glob')
 import * as _ from 'lodash'
-import {promisify} from 'util'
 import {join, resolve, dirname, basename} from 'path'
-import stdin = require('stdin')
 import {compile, Options} from './index'
-import {pathTransform} from './utils'
-
-// Promisify glob
-const glob = promisify(_glob)
+import {pathTransform, error} from './utils'
 
 main(
   minimist(process.argv.slice(2), {
@@ -75,7 +70,7 @@ async function main(argv: minimist.ParsedArgs) {
       outputResult(result, argOut)
     }
   } catch (e) {
-    console.error(whiteBright.bgRedBright('error'), e)
+    error(e)
     process.exit(1)
   }
 }
@@ -157,7 +152,7 @@ function getPaths(path: string, paths: string[] = []) {
 
 function readInput(argIn?: string) {
   if (!argIn) {
-    return new Promise(stdin)
+    return getStdin()
   }
   return readFile(resolve(process.cwd(), argIn), 'utf-8')
 }
@@ -183,6 +178,8 @@ Boolean values can be set to false using the 'no-' prefix.
       Declare external schemas referenced via '$ref'?
   --enableConstEnums
       Prepend enums with 'const'?
+  --format
+      Format code? Set this to false to improve performance.
   --style.XXX=YYY
       Prettier configuration
   --unknownAny
